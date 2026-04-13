@@ -1,0 +1,14 @@
+.env
+node_modules/
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
+backend/tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+.DS_Store
