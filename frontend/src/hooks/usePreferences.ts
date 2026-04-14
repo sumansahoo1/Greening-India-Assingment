@@ -21,6 +21,7 @@ export function usePreferences() {
 }
 
 export function useUpdatePreferences() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (prefs: Partial<Preferences>) => {
@@ -28,7 +29,7 @@ export function useUpdatePreferences() {
       return data;
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(['preferences'], data);
+      queryClient.setQueryData(['preferences', user?.id], data);
     },
   });
 }
