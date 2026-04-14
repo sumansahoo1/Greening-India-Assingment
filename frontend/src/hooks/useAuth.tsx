@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import api from '@/lib/api';
+import { queryClient } from '@/lib/queryClient';
 import type { User, AuthResponse } from '@/types';
 
 interface AuthContextType {
@@ -21,6 +22,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
 
   const handleAuthResponse = useCallback((data: AuthResponse) => {
+    // Ensure we don't leak cached data between users/sessions.
+    queryClient.clear();
     setUser(data.user);
     setToken(data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
@@ -38,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [handleAuthResponse]);
 
   const logout = useCallback(() => {
+    queryClient.clear();
     setUser(null);
     setToken(null);
     localStorage.removeItem('user');

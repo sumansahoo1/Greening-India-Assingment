@@ -35,11 +35,15 @@ A minimal but complete task management system with authentication, relational da
 Assumes you have Docker and Docker Compose installed.
 
 ```bash
-git clone https://github.com/your-name/taskflow
+git clone https://github.com/sumansahoo1/Greening-India-Assingment.git
 cd taskflow
 cp .env.example .env
 docker compose up --build
 ```
+
+Notes:
+
+- **Postgres port**: Postgres is published on host port **5433** by default (configurable via `POSTGRES_HOST_PORT` in `.env`). This avoids collisions with a locally running Postgres on 5432.
 
 Once all three services are healthy:
 
@@ -62,20 +66,41 @@ docker compose exec api ./api  # migrations run on startup
 
 ## Test Credentials
 
-A seed user is created automatically on first startup:
+Two seed users are created automatically on first startup:
 
 ```
 Email:    test@example.com
 Password: password123
+
+Email:    andy@example.com
+Password: password123
 ```
 
-The seed also creates one project ("Website Redesign") with three tasks in different statuses (todo, in_progress, done).
+The seed also creates 15 total projects and 20 tasks per project so the UI has enough data to browse.
 
 ---
 
 ## API Reference
 
 All endpoints return `Content-Type: application/json`. Protected endpoints require `Authorization: Bearer <token>`.
+
+### Preferences
+
+Per-user preferences are stored server-side.
+
+#### GET `/me/preferences`
+
+```json
+// Response 200
+{ "projects_page_size": 12, "tasks_page_size": 12 }
+```
+
+#### PATCH `/me/preferences`
+
+```json
+// Request — all fields optional
+{ "projects_page_size": 24 }
+```
 
 ### Authentication
 
@@ -219,5 +244,4 @@ Project owner or task creator only. Returns `204 No Content`.
 - **Better error handling:** More granular error types in Go (custom error types instead of string matching for duplicate key detection).
 - **Rate limiting:** Add middleware to prevent brute-force login attempts.
 - **Assignee picker:** Add a searchable assignee dropdown and optionally restrict choices to project members rather than all users.
-- **Pagination UI:** The API supports pagination but the frontend doesn't yet expose page controls.
 - **CI/CD:** GitHub Actions pipeline for linting, testing, and building Docker images.

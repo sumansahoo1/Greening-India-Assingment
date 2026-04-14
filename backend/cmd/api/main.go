@@ -44,13 +44,14 @@ func main() {
 	runSeed(pool, logger)
 
 	userRepo := repository.NewUserRepo(pool)
+	prefsRepo := repository.NewPreferencesRepo(pool)
 	projectRepo := repository.NewProjectRepo(pool)
 	taskRepo := repository.NewTaskRepo(pool)
 
 	authHandler := handler.NewAuthHandler(userRepo, cfg.JWTSecret)
 	projectHandler := handler.NewProjectHandler(projectRepo, taskRepo)
 	taskHandler := handler.NewTaskHandler(taskRepo, projectRepo)
-	userHandler := handler.NewUserHandler(userRepo)
+	userHandler := handler.NewUserHandler(userRepo, prefsRepo)
 
 	r := chi.NewRouter()
 
@@ -71,6 +72,8 @@ func main() {
 		r.Use(middleware.Auth(cfg.JWTSecret))
 
 		r.Get("/me", userHandler.Me)
+		r.Get("/me/preferences", userHandler.GetPreferences)
+		r.Patch("/me/preferences", userHandler.UpdatePreferences)
 		r.Get("/users", userHandler.ListAll)
 		r.Get("/projects/{id}/members", userHandler.ListByProject)
 

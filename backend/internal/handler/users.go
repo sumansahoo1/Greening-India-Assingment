@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -11,10 +12,11 @@ import (
 
 type UserHandler struct {
 	users *repository.UserRepo
+	prefs *repository.PreferencesRepo
 }
 
-func NewUserHandler(users *repository.UserRepo) *UserHandler {
-	return &UserHandler{users: users}
+func NewUserHandler(users *repository.UserRepo, prefs *repository.PreferencesRepo) *UserHandler {
+	return &UserHandler{users: users, prefs: prefs}
 }
 
 func (h *UserHandler) Me(w http.ResponseWriter, r *http.Request) {
@@ -75,4 +77,61 @@ func (h *UserHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, map[string]any{"users": members})
+}
+
+type preferencesJSON struct {
+	ProjectsPageSize *int `json:"projects_page_size"`
+	TasksPageSize    *int `json:"tasks_page_size"`
+}
+
+func (h *UserHandler) GetPreferences(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
+	prefs, err := h.prefs.Get(r.Context(), userID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to get preferences")
+		return
+	}
+
+	projects := prefs.ProjectsPageSize
+	tasks := prefs.TasksPageSize
+	response.JSON(w, http.StatusOK, preferencesJSON{
+		ProjectsPageSize: &projects,
+		TasksPageSize:    &tasks,
+	})
+}
+
+func (h *UserHandler) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
+	var req preferencesJSON
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	errs := map[string]string{}
+	if req.ProjectsPageSize != nil && *req.ProjectsPageSize != 6 && *req.ProjectsPageSize != 12 && *req.ProjectsPageSize != 24 {
+		errs["projects_page_size"] = "must be 6, 12, or 24"
+	}
+	if req.TasksPageSize != nil && *req.TasksPageSize != 6 && *req.TasksPageSize != 12 && *req.TasksPageSize != 24 {
+		errs["tasks_page_size"] = "must be 6, 12, or 24"
+	}
+	if len(errs) > 0 {
+		response.ValidationError(w, errs)
+		return
+	}
+
+	saved, err := h.prefs.Set(r.Context(), userID, req.ProjectsPageSize, req.TasksPageSize)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to update preferences")
+		return
+	}
+
+	projects := saved.ProjectsPageSize
+	tasks := saved.TasksPageSize
+	response.JSON(w, http.StatusOK, preferencesJSON{
+		ProjectsPageSize: &projects,
+		TasksPageSize:    &tasks,
+	})
 }

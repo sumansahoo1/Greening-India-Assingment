@@ -1,21 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { LoginPage } from '@/pages/Login';
 import { RegisterPage } from '@/pages/Register';
 import { ProjectsPage } from '@/pages/Projects';
 import { ProjectDetailPage } from '@/pages/ProjectDetail';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 30_000,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
+import { queryClient } from '@/lib/queryClient';
 
 export default function App() {
   return (
