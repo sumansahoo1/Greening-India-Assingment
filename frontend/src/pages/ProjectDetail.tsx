@@ -20,6 +20,7 @@ import {
   CheckCircle2, Clock, Circle, ListTodo, UserCircle,
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import { usePreferences, useUpdatePreferences } from '@/hooks/usePreferences';
 
 const taskSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -62,6 +63,10 @@ export function ProjectDetailPage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
   const [assigneeFilter, setAssigneeFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const { data: prefs, isLoading: prefsLoading, isError: prefsError } = usePreferences();
+  const updatePrefs = useUpdatePreferences();
+  const limit = prefs?.tasks_page_size;
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const { data: project, isLoading, isError, refetch } = useQuery({
@@ -70,6 +75,21 @@ export function ProjectDetailPage() {
       const { data } = await api.get<ProjectWithTasks>(`/projects/${id}`);
       return data;
     },
+  });
+
+  const { data: taskPage } = useQuery({
+    queryKey: ['project-tasks', id, statusFilter, assigneeFilter, page, limit ?? 12],
+    queryFn: async () => {
+      const params: Record<string, string | number | undefined> = { page, limit: limit ?? 12 };
+      if (statusFilter) params.status = statusFilter;
+      if (assigneeFilter) params.assignee = assigneeFilter;
+      const { data } = await api.get<{ tasks: Task[]; total: number; page: number; limit: number }>(
+        `/projects/${id}/tasks`,
+        { params }
+      );
+      return data;
+    },
+    enabled: !!id && !prefsLoading && !prefsError && limit != null,
   });
 
   // Fetch all registered users for the assignee picker
@@ -103,6 +123,7 @@ export function ProjectDetailPage() {
     mutationFn: (body: TaskForm) => api.post(`/projects/${id}/tasks`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', id] });
+      queryClient.invalidateQueries({ queryKey: ['project-tasks', id] });
       setTaskDialogOpen(false);
       taskForm.reset();
     },
@@ -112,23 +133,34 @@ export function ProjectDetailPage() {
     mutationFn: ({ taskId, body }: { taskId: string; body: Partial<TaskForm> }) =>
       api.patch(`/tasks/${taskId}`, body),
     onMutate: async ({ taskId, body }) => {
-      await queryClient.cancelQueries({ queryKey: ['project', id] });
-      const prev = queryClient.getQueryData<ProjectWithTasks>(['project', id]);
+      await queryClient.cancelQueries({ queryKey: ['project-tasks', id] });
+      const prev = queryClient.getQueryData<{ tasks: Task[]; total: number; page: number; limit: number }>([
+        'project-tasks',
+        id,
+        statusFilter,
+        assigneeFilter,
+        page,
+        limit,
+      ]);
       if (prev) {
-        queryClient.setQueryData<ProjectWithTasks>(['project', id], {
-          ...prev,
-          tasks: prev.tasks.map((t) => (t.id === taskId ? { ...t, ...body } : t)),
-        });
+        queryClient.setQueryData(
+          ['project-tasks', id, statusFilter, assigneeFilter, page, limit],
+          {
+            ...prev,
+            tasks: prev.tasks.map((t) => (t.id === taskId ? { ...t, ...body } : t)),
+          }
+        );
       }
       return { prev };
     },
     onError: (_err, _vars, context) => {
       if (context?.prev) {
-        queryClient.setQueryData(['project', id], context.prev);
+        queryClient.setQueryData(['project-tasks', id, statusFilter, assigneeFilter, page, limit], context.prev);
       }
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['project', id] });
+      queryClient.invalidateQueries({ queryKey: ['project-tasks', id] });
       setEditingTask(null);
       setTaskDialogOpen(false);
     },
@@ -138,6 +170,7 @@ export function ProjectDetailPage() {
     mutationFn: (taskId: string) => api.delete(`/tasks/${taskId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', id] });
+      queryClient.invalidateQueries({ queryKey: ['project-tasks', id] });
       setDeleteConfirm(null);
     },
   });
@@ -196,7 +229,7 @@ export function ProjectDetailPage() {
     updateTaskMutation.mutate({ taskId: task.id, body: { status: next } });
   };
 
-  if (isLoading) {
+  if (prefsLoading || isLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-64" />
@@ -208,7 +241,7 @@ export function ProjectDetailPage() {
     );
   }
 
-  if (isError || !project) {
+  if (prefsError || isError || !project) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <AlertCircle className="h-12 w-12 text-destructive mb-4" />
@@ -222,14 +255,12 @@ export function ProjectDetailPage() {
     );
   }
 
-  const filteredTasks = (project.tasks || []).filter((t) => {
-    if (statusFilter && t.status !== statusFilter) return false;
-    if (assigneeFilter) {
-      if (assigneeFilter === 'unassigned') return t.assignee_id === null;
-      return t.assignee_id === assigneeFilter;
-    }
-    return true;
-  });
+  const tasks = taskPage?.tasks ?? [];
+  const totalTasks = taskPage?.total ?? 0;
+  const effectiveLimit = limit ?? 12;
+  const totalPages = Math.max(1, Math.ceil(totalTasks / effectiveLimit));
+  const start = totalTasks === 0 ? 0 : (page - 1) * effectiveLimit + 1;
+  const end = Math.min(totalTasks, page * effectiveLimit);
 
   return (
     <div className="space-y-6">
@@ -266,7 +297,7 @@ export function ProjectDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
             className="w-40"
           >
             <option value="">All statuses</option>
@@ -276,7 +307,7 @@ export function ProjectDetailPage() {
           </Select>
           <Select
             value={assigneeFilter}
-            onChange={(e) => setAssigneeFilter(e.target.value)}
+            onChange={(e) => { setAssigneeFilter(e.target.value); setPage(1); }}
             className="w-44"
           >
             <option value="">All assignees</option>
@@ -291,7 +322,7 @@ export function ProjectDetailPage() {
         </Button>
       </div>
 
-      {filteredTasks.length === 0 ? (
+      {tasks.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-16 text-center">
           <ListTodo className="h-12 w-12 text-muted-foreground mb-4" />
           <h2 className="text-lg font-semibold">No tasks found</h2>
@@ -306,7 +337,7 @@ export function ProjectDetailPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredTasks.map((task) => {
+          {tasks.map((task) => {
             const sc = statusConfig[task.status];
             const pc = priorityConfig[task.priority];
             const StatusIcon = sc.icon;
@@ -364,6 +395,43 @@ export function ProjectDetailPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {totalTasks > 0 && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Showing <span className="text-foreground">{start}</span>–<span className="text-foreground">{end}</span> of{' '}
+            <span className="text-foreground">{totalTasks}</span>
+          </p>
+          <div className="flex items-center gap-2">
+            <select
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              value={effectiveLimit}
+              onChange={(e) => {
+                updatePrefs.mutate({ tasks_page_size: Number(e.target.value) });
+                setPage(1);
+              }}
+              aria-label="Tasks per page"
+            >
+              <option value={6}>6 / page</option>
+              <option value={12}>12 / page</option>
+              <option value={24}>24 / page</option>
+            </select>
+            <Button variant="outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+              Prev
+            </Button>
+            <div className="px-2 text-sm text-muted-foreground">
+              Page <span className="text-foreground">{page}</span> / <span className="text-foreground">{totalPages}</span>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       )}
 

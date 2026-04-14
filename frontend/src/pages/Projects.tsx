@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, FolderOpen, AlertCircle } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import { usePreferences, useUpdatePreferences } from '@/hooks/usePreferences';
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -24,20 +25,29 @@ type CreateForm = z.infer<typeof createSchema>;
 
 export function ProjectsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const { data: prefs, isLoading: prefsLoading, isError: prefsError } = usePreferences();
+  const updatePrefs = useUpdatePreferences();
+  const limit = prefs?.projects_page_size;
   const queryClient = useQueryClient();
 
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['projects'],
+  const { data, isLoading: projectsLoading, isError: projectsError, refetch } = useQuery({
+    queryKey: ['projects', page, limit ?? 12],
     queryFn: async () => {
-      const { data } = await api.get<{ projects: Project[] }>('/projects');
-      return data.projects;
+      const { data } = await api.get<{ projects: Project[]; total: number; page: number; limit: number }>(
+        '/projects',
+        { params: { page, limit: limit ?? 12 } }
+      );
+      return data;
     },
+    enabled: !prefsLoading && !prefsError && limit != null,
   });
 
   const createMutation = useMutation({
     mutationFn: (body: CreateForm) => api.post('/projects', body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setPage(1);
       setDialogOpen(false);
       reset();
     },
@@ -49,7 +59,7 @@ export function ProjectsPage() {
 
   const onSubmit = (data: CreateForm) => createMutation.mutate(data);
 
-  if (isLoading) {
+  if (prefsLoading || projectsLoading) {
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -65,7 +75,7 @@ export function ProjectsPage() {
     );
   }
 
-  if (isError) {
+  if (prefsError || projectsError) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <AlertCircle className="h-12 w-12 text-destructive mb-4" />
@@ -76,7 +86,12 @@ export function ProjectsPage() {
     );
   }
 
-  const projects = data || [];
+  const projects = data?.projects ?? [];
+  const total = data?.total ?? 0;
+  const effectiveLimit = limit ?? 12;
+  const totalPages = Math.max(1, Math.ceil(total / effectiveLimit));
+  const start = total === 0 ? 0 : (page - 1) * effectiveLimit + 1;
+  const end = Math.min(total, page * effectiveLimit);
 
   return (
     <div className="space-y-6">
@@ -115,6 +130,47 @@ export function ProjectsPage() {
               </p>
             </Link>
           ))}
+        </div>
+      )}
+
+      {total > 0 && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Showing <span className="text-foreground">{start}</span>–<span className="text-foreground">{end}</span> of{' '}
+            <span className="text-foreground">{total}</span>
+          </p>
+          <div className="flex items-center gap-2">
+            <select
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              value={effectiveLimit}
+              onChange={(e) => {
+                updatePrefs.mutate({ projects_page_size: Number(e.target.value) });
+                setPage(1);
+              }}
+              aria-label="Projects per page"
+            >
+              <option value={6}>6 / page</option>
+              <option value={12}>12 / page</option>
+              <option value={24}>24 / page</option>
+            </select>
+            <Button
+              variant="outline"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+            >
+              Prev
+            </Button>
+            <div className="px-2 text-sm text-muted-foreground">
+              Page <span className="text-foreground">{page}</span> / <span className="text-foreground">{totalPages}</span>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       )}
 

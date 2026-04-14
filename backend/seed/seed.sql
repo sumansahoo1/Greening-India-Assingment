@@ -1,6 +1,7 @@
 -- Seed data for TaskFlow
 -- Test user: test@example.com / password123
 
+-- Create (or keep) a stable seed user.
 INSERT INTO users (id, name, email, password, created_at)
 VALUES (
     'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
@@ -10,54 +11,75 @@ VALUES (
     now()
 ) ON CONFLICT (email) DO NOTHING;
 
-INSERT INTO projects (id, name, description, owner_id, created_at)
+-- Second dev user: andy@example.com / password123
+INSERT INTO users (id, name, email, password, created_at)
 VALUES (
-    'b2c3d4e5-f6a7-8901-bcde-f12345678901',
-    'Website Redesign',
-    'Q2 project to redesign the company website with a modern look and improved UX.',
-    'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    'f1e2d3c4-b5a6-7980-9abc-def012345678',
+    'Andy',
+    'andy@example.com',
+    '$2b$12$RDGKSPkugms1FG1LGcXnUuVMFOpbNKer9iij2hrU/ftCTRLinSXVW',
     now()
-) ON CONFLICT DO NOTHING;
+) ON CONFLICT (email) DO NOTHING;
 
-INSERT INTO tasks (id, title, description, status, priority, project_id, assignee_id, created_by, due_date, created_at, updated_at)
-VALUES
-    (
-        'c3d4e5f6-a7b8-9012-cdef-123456789012',
-        'Design homepage mockup',
-        'Create wireframes and high-fidelity mockups for the new homepage layout.',
-        'todo',
-        'high',
-        'b2c3d4e5-f6a7-8901-bcde-f12345678901',
+-- Make the seed idempotent: clear prior seeded projects/tasks for this user.
+DELETE FROM tasks
+WHERE project_id IN (
+    SELECT id
+    FROM projects
+    WHERE owner_id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+      AND (name = 'Website Redesign' OR name LIKE 'Seed Project %')
+);
+
+DELETE FROM projects
+WHERE owner_id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+  AND (name = 'Website Redesign' OR name LIKE 'Seed Project %');
+
+-- Seed 15 projects and 20 tasks per project (300 tasks total).
+WITH inserted_projects AS (
+    INSERT INTO projects (name, description, owner_id, created_at)
+    SELECT
+        CASE
+            WHEN gs = 1 THEN 'Website Redesign'
+            ELSE 'Seed Project ' || lpad(gs::text, 2, '0')
+        END,
+        CASE
+            WHEN gs = 1 THEN 'Q2 project to redesign the company website with a modern look and improved UX.'
+            ELSE 'Seeded project #' || gs::text
+        END,
         'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-        'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-        '2026-04-20',
-        now(),
         now()
-    ),
-    (
-        'd4e5f6a7-b8c9-0123-defa-234567890123',
-        'Implement responsive navigation',
-        'Build a mobile-first responsive navigation bar with hamburger menu.',
-        'in_progress',
-        'medium',
-        'b2c3d4e5-f6a7-8901-bcde-f12345678901',
-        'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-        'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-        '2026-04-25',
-        now(),
-        now()
-    ),
-    (
-        'e5f6a7b8-c9d0-1234-efab-345678901234',
-        'Set up CI/CD pipeline',
-        'Configure GitHub Actions for automated testing and deployment.',
-        'done',
-        'low',
-        'b2c3d4e5-f6a7-8901-bcde-f12345678901',
-        NULL,
-        'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-        '2026-04-15',
-        now(),
-        now()
-    )
-ON CONFLICT DO NOTHING;
+    FROM generate_series(1, 15) AS gs
+    RETURNING id, name
+),
+numbered_projects AS (
+    SELECT
+        id,
+        row_number() OVER (ORDER BY name) AS project_no
+    FROM inserted_projects
+)
+INSERT INTO tasks (title, description, status, priority, project_id, assignee_id, created_by, due_date, created_at, updated_at)
+SELECT
+    'Task ' || lpad(t::text, 2, '0') || ' (Project ' || lpad(p.project_no::text, 2, '0') || ')',
+    'Seeded task #' || t::text || ' for project #' || p.project_no::text,
+    (CASE (t % 3)
+        WHEN 1 THEN 'todo'
+        WHEN 2 THEN 'in_progress'
+        ELSE 'done'
+    END)::task_status,
+    (CASE (t % 3)
+        WHEN 1 THEN 'low'
+        WHEN 2 THEN 'medium'
+        ELSE 'high'
+    END)::task_priority,
+    p.id,
+    CASE
+        WHEN (t % 5) = 0 THEN NULL
+        WHEN (t % 2) = 0 THEN 'f1e2d3c4-b5a6-7980-9abc-def012345678'
+        ELSE 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+    END::uuid,
+    'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    (current_date + (((p.project_no - 1) * 2 + t)::int))::date,
+    now(),
+    now()
+FROM numbered_projects p
+CROSS JOIN generate_series(1, 20) AS t;

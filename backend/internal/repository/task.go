@@ -35,7 +35,9 @@ func (r *TaskRepo) ListByProject(ctx context.Context, projectID, status, assigne
 		args = append(args, status)
 		argIdx++
 	}
-	if assigneeID != "" {
+	if assigneeID == "unassigned" {
+		where = append(where, "t.assignee_id IS NULL")
+	} else if assigneeID != "" {
 		where = append(where, fmt.Sprintf("t.assignee_id = $%d::uuid", argIdx))
 		args = append(args, assigneeID)
 		argIdx++
