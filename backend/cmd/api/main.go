@@ -51,7 +51,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(userRepo, cfg.JWTSecret)
 	projectHandler := handler.NewProjectHandler(projectRepo, taskRepo)
 	taskHandler := handler.NewTaskHandler(taskRepo, projectRepo)
-	userHandler := handler.NewUserHandler(userRepo, prefsRepo)
+	userHandler := handler.NewUserHandler(userRepo, prefsRepo, projectRepo)
 
 	r := chi.NewRouter()
 
@@ -188,8 +188,19 @@ func runSeed(pool *pgxpool.Pool, logger *slog.Logger) {
 		return
 	}
 
+	var count int
+	err = pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM projects
+		 WHERE owner_id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+		   AND (name = 'Website Redesign' OR name LIKE 'Seed Project %')`,
+	).Scan(&count)
+	if err == nil && count > 0 {
+		logger.Info("seed data already present, skipping")
+		return
+	}
+
 	if _, err := pool.Exec(context.Background(), string(seedSQL)); err != nil {
-		logger.Warn("seed execution had issues (may already be seeded)", "error", err)
+		logger.Warn("seed execution had issues", "error", err)
 		return
 	}
 	logger.Info("seed data applied")

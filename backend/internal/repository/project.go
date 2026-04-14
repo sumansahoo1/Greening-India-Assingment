@@ -36,7 +36,7 @@ func (r *ProjectRepo) List(ctx context.Context, userID string, page, limit int) 
 		 FROM projects p
 		 LEFT JOIN tasks t ON t.project_id = p.id
 		 WHERE p.owner_id = $1 OR t.assignee_id = $1
-		 ORDER BY p.created_at DESC
+		 ORDER BY p.created_at DESC, p.id ASC
 		 LIMIT $2 OFFSET $3`,
 		userID, limit, offset,
 	)
@@ -97,4 +97,21 @@ func (r *ProjectRepo) Update(ctx context.Context, id, name, description string) 
 func (r *ProjectRepo) Delete(ctx context.Context, id string) error {
 	_, err := r.db.Exec(ctx, `DELETE FROM projects WHERE id = $1`, id)
 	return err
+}
+
+func (r *ProjectRepo) CanAccess(ctx context.Context, projectID, userID string) (bool, error) {
+	var ok bool
+	err := r.db.QueryRow(ctx,
+		`SELECT EXISTS (
+			SELECT 1
+			FROM projects p
+			LEFT JOIN tasks t ON t.project_id = p.id AND t.assignee_id = $2
+			WHERE p.id = $1 AND (p.owner_id = $2 OR t.assignee_id = $2)
+		)`,
+		projectID, userID,
+	).Scan(&ok)
+	if err != nil {
+		return false, err
+	}
+	return ok, nil
 }

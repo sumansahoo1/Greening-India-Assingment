@@ -13,10 +13,11 @@ import (
 type UserHandler struct {
 	users *repository.UserRepo
 	prefs *repository.PreferencesRepo
+	projects *repository.ProjectRepo
 }
 
-func NewUserHandler(users *repository.UserRepo, prefs *repository.PreferencesRepo) *UserHandler {
-	return &UserHandler{users: users, prefs: prefs}
+func NewUserHandler(users *repository.UserRepo, prefs *repository.PreferencesRepo, projects *repository.ProjectRepo) *UserHandler {
+	return &UserHandler{users: users, prefs: prefs, projects: projects}
 }
 
 func (h *UserHandler) Me(w http.ResponseWriter, r *http.Request) {
@@ -58,6 +59,17 @@ func (h *UserHandler) ListAll(w http.ResponseWriter, r *http.Request) {
 
 func (h *UserHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
+	userID := middleware.GetUserID(r.Context())
+
+	canAccess, err := h.projects.CanAccess(r.Context(), projectID, userID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to check access")
+		return
+	}
+	if !canAccess {
+		response.Error(w, http.StatusForbidden, "forbidden")
+		return
+	}
 
 	users, err := h.users.ListByProject(r.Context(), projectID)
 	if err != nil {

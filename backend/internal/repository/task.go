@@ -54,7 +54,7 @@ func (r *TaskRepo) ListByProject(ctx context.Context, projectID, status, assigne
 	offset := (page - 1) * limit
 	args = append(args, limit, offset)
 	query := fmt.Sprintf(
-		`SELECT %s FROM tasks t WHERE %s ORDER BY t.created_at ASC, t.title ASC LIMIT $%d OFFSET $%d`,
+		`SELECT %s FROM tasks t WHERE %s ORDER BY t.created_at ASC, t.title ASC, t.id ASC LIMIT $%d OFFSET $%d`,
 		taskSelectCols, whereClause, argIdx, argIdx+1,
 	)
 
@@ -176,6 +176,60 @@ func (r *TaskRepo) StatsByProject(ctx context.Context, projectID string) (*model
 		 WHERE t.project_id = $1
 		 GROUP BY u.id, u.name`,
 		projectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows2.Close()
+
+	for rows2.Next() {
+		var id, name string
+		var count int
+		if err := rows2.Scan(&id, &name, &count); err != nil {
+			return nil, err
+		}
+		stats.ByAssignee[id] = model.AssigneeStats{Name: name, Count: count}
+	}
+	return stats, rows2.Err()
+}
+
+func (r *TaskRepo) StatsByProjectForAssignee(ctx context.Context, projectID, assigneeID string) (*model.ProjectStats, error) {
+	stats := &model.ProjectStats{
+		ByStatus:   make(map[string]int),
+		ByAssignee: make(map[string]model.AssigneeStats),
+	}
+
+	rows, err := r.db.Query(ctx,
+		`SELECT status::text, COUNT(*)
+		 FROM tasks
+		 WHERE project_id = $1 AND assignee_id = $2
+		 GROUP BY status`,
+		projectID, assigneeID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, err
+		}
+		stats.ByStatus[status] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	rows2, err := r.db.Query(ctx,
+		`SELECT u.id::text, u.name, COUNT(*)
+		 FROM tasks t
+		 JOIN users u ON t.assignee_id = u.id
+		 WHERE t.project_id = $1 AND t.assignee_id = $2
+		 GROUP BY u.id, u.name`,
+		projectID, assigneeID,
 	)
 	if err != nil {
 		return nil, err

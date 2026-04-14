@@ -86,6 +86,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
+	userID := middleware.GetUserID(r.Context())
 
 	project, err := h.projects.GetByID(r.Context(), projectID)
 	if err != nil {
@@ -97,7 +98,21 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tasks, _, err := h.tasks.ListByProject(r.Context(), projectID, "", "", 1, 1000)
+	assignee := ""
+	if project.OwnerID != userID {
+		canAccess, err := h.projects.CanAccess(r.Context(), projectID, userID)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, "failed to check access")
+			return
+		}
+		if !canAccess {
+			response.Error(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		assignee = userID
+	}
+
+	tasks, _, err := h.tasks.ListByProject(r.Context(), projectID, "", assignee, 1, 1000)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "failed to list tasks")
 		return
@@ -194,14 +209,34 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 func (h *ProjectHandler) Stats(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
+	userID := middleware.GetUserID(r.Context())
 
-	_, err := h.projects.GetByID(r.Context(), projectID)
+	project, err := h.projects.GetByID(r.Context(), projectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			response.Error(w, http.StatusNotFound, "not found")
 			return
 		}
 		response.Error(w, http.StatusInternalServerError, "failed to get project")
+		return
+	}
+
+	if project.OwnerID != userID {
+		canAccess, err := h.projects.CanAccess(r.Context(), projectID, userID)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, "failed to check access")
+			return
+		}
+		if !canAccess {
+			response.Error(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		stats, err := h.tasks.StatsByProjectForAssignee(r.Context(), projectID, userID)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, "failed to get stats")
+			return
+		}
+		response.JSON(w, http.StatusOK, stats)
 		return
 	}
 

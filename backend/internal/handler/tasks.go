@@ -37,8 +37,29 @@ type updateTaskRequest struct {
 	Description *string `json:"description"`
 	Status      *string `json:"status"`
 	Priority    *string `json:"priority"`
-	AssigneeID  *string `json:"assignee_id"`
+	AssigneeID  optionalString `json:"assignee_id"`
 	DueDate     *string `json:"due_date"`
+}
+
+// optionalString distinguishes between a missing JSON field and an explicit null.
+// This is needed so PATCH can clear assignee_id (set to NULL).
+type optionalString struct {
+	Set   bool
+	Value *string
+}
+
+func (o *optionalString) UnmarshalJSON(b []byte) error {
+	o.Set = true
+	if string(b) == "null" {
+		o.Value = nil
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	o.Value = &s
+	return nil
 }
 
 var validStatuses = map[string]bool{"todo": true, "in_progress": true, "done": true}
@@ -46,11 +67,11 @@ var validPriorities = map[string]bool{"low": true, "medium": true, "high": true}
 
 func (h *TaskHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
+	userID := middleware.GetUserID(r.Context())
 	status := r.URL.Query().Get("status")
-	assignee := r.URL.Query().Get("assignee")
 	page, limit := parsePagination(r)
 
-	_, err := h.projects.GetByID(r.Context(), projectID)
+	project, err := h.projects.GetByID(r.Context(), projectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			response.Error(w, http.StatusNotFound, "not found")
@@ -58,6 +79,20 @@ func (h *TaskHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 		}
 		response.Error(w, http.StatusInternalServerError, "failed to get project")
 		return
+	}
+
+	assignee := r.URL.Query().Get("assignee")
+	if project.OwnerID != userID {
+		canAccess, err := h.projects.CanAccess(r.Context(), projectID, userID)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, "failed to check access")
+			return
+		}
+		if !canAccess {
+			response.Error(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		assignee = userID
 	}
 
 	tasks, total, err := h.tasks.ListByProject(r.Context(), projectID, status, assignee, page, limit)
@@ -82,7 +117,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
 
-	_, err := h.projects.GetByID(r.Context(), projectID)
+	project, err := h.projects.GetByID(r.Context(), projectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			response.Error(w, http.StatusNotFound, "not found")
@@ -114,6 +149,29 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.AssigneeID != nil && (strings.TrimSpace(*req.AssigneeID) == "" || *req.AssigneeID == "unassigned") {
+		req.AssigneeID = nil
+	}
+
+	if project.OwnerID != userID {
+		canAccess, err := h.projects.CanAccess(r.Context(), projectID, userID)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, "failed to check access")
+			return
+		}
+		if !canAccess {
+			response.Error(w, http.StatusForbidden, "forbidden")
+			return
+		}
+
+		if req.AssigneeID == nil {
+			req.AssigneeID = &userID
+		} else if *req.AssigneeID != userID {
+			response.Error(w, http.StatusForbidden, "forbidden")
+			return
+		}
+	}
+
 	task, err := h.tasks.Create(
 		r.Context(),
 		strings.TrimSpace(req.Title),
@@ -135,14 +193,26 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	taskID := chi.URLParam(r, "id")
+	userID := middleware.GetUserID(r.Context())
 
-	_, err := h.tasks.GetByID(r.Context(), taskID)
+	task, err := h.tasks.GetByID(r.Context(), taskID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			response.Error(w, http.StatusNotFound, "not found")
 			return
 		}
 		response.Error(w, http.StatusInternalServerError, "failed to get task")
+		return
+	}
+
+	project, err := h.projects.GetByID(r.Context(), task.ProjectID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to get project")
+		return
+	}
+
+	if project.OwnerID != userID && (task.AssigneeID == nil || *task.AssigneeID != userID) {
+		response.Error(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
@@ -177,11 +247,11 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		fields["priority"] = *req.Priority
 	}
-	if req.AssigneeID != nil {
-		if *req.AssigneeID == "" {
-			fields["assignee_id"] = nil
+	if req.AssigneeID.Set {
+		if req.AssigneeID.Value == nil || strings.TrimSpace(*req.AssigneeID.Value) == "" || *req.AssigneeID.Value == "unassigned" {
+			fields["assignee_id"] = nil // clears assignee_id
 		} else {
-			fields["assignee_id"] = *req.AssigneeID
+			fields["assignee_id"] = *req.AssigneeID.Value
 		}
 	}
 	if req.DueDate != nil {
@@ -231,7 +301,7 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if project.OwnerID != userID && task.CreatedBy != userID {
+	if project.OwnerID != userID && (task.AssigneeID == nil || *task.AssigneeID != userID) {
 		response.Error(w, http.StatusForbidden, "forbidden")
 		return
 	}

@@ -21,20 +21,9 @@ VALUES (
     now()
 ) ON CONFLICT (email) DO NOTHING;
 
--- Make the seed idempotent: clear prior seeded projects/tasks for this user.
-DELETE FROM tasks
-WHERE project_id IN (
-    SELECT id
-    FROM projects
-    WHERE owner_id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
-      AND (name = 'Website Redesign' OR name LIKE 'Seed Project %')
-);
-
-DELETE FROM projects
-WHERE owner_id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
-  AND (name = 'Website Redesign' OR name LIKE 'Seed Project %');
-
 -- Seed 15 projects and 20 tasks per project (300 tasks total).
+-- Each project gets a distinct created_at offset so ORDER BY created_at is stable
+-- across restarts (gs=1 is oldest, gs=15 is newest → newest-first list shows gs=15 first).
 WITH inserted_projects AS (
     INSERT INTO projects (name, description, owner_id, created_at)
     SELECT
@@ -47,7 +36,7 @@ WITH inserted_projects AS (
             ELSE 'Seeded project #' || gs::text
         END,
         'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-        now()
+        now() - ((16 - gs) * interval '1 minute')
     FROM generate_series(1, 15) AS gs
     RETURNING id, name
 ),
@@ -79,7 +68,7 @@ SELECT
     END::uuid,
     'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
     (current_date + (((p.project_no - 1) * 2 + t)::int))::date,
-    now(),
-    now()
+    now() - (((15 - p.project_no) * 20 + (21 - t)) * interval '1 second'),
+    now() - (((15 - p.project_no) * 20 + (21 - t)) * interval '1 second')
 FROM numbered_projects p
 CROSS JOIN generate_series(1, 20) AS t;

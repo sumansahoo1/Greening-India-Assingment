@@ -27,7 +27,7 @@ const taskSchema = z.object({
   description: z.string().optional(),
   priority: z.enum(['low', 'medium', 'high']),
   status: z.enum(['todo', 'in_progress', 'done']).optional(),
-  assignee_id: z.string().optional(),
+  assignee_id: z.string().nullable().optional(),
   due_date: z.string().optional(),
 });
 
@@ -249,7 +249,7 @@ export function ProjectDetailPage() {
   const onTaskSubmit = (data: TaskForm) => {
     const cleaned = {
       ...data,
-      assignee_id: data.assignee_id || undefined,
+      assignee_id: data.assignee_id === '' ? null : (data.assignee_id ?? undefined),
       due_date: data.due_date || undefined,
     };
     if (editingTask) {
