@@ -54,7 +54,7 @@ func (r *TaskRepo) ListByProject(ctx context.Context, projectID, status, assigne
 	offset := (page - 1) * limit
 	args = append(args, limit, offset)
 	query := fmt.Sprintf(
-		`SELECT %s FROM tasks t WHERE %s ORDER BY t.created_at DESC LIMIT $%d OFFSET $%d`,
+		`SELECT %s FROM tasks t WHERE %s ORDER BY t.created_at ASC, t.title ASC LIMIT $%d OFFSET $%d`,
 		taskSelectCols, whereClause, argIdx, argIdx+1,
 	)
 
