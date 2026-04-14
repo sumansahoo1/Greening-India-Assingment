@@ -130,8 +130,10 @@ export function ProjectDetailPage() {
   });
 
   const updateTaskMutation = useMutation({
-    mutationFn: ({ taskId, body }: { taskId: string; body: Partial<TaskForm> }) =>
-      api.patch(`/tasks/${taskId}`, body),
+    mutationFn: async ({ taskId, body }: { taskId: string; body: Partial<TaskForm> }) => {
+      const { data } = await api.patch<Task>(`/tasks/${taskId}`, body);
+      return data;
+    },
     onMutate: async ({ taskId, body }) => {
       await queryClient.cancelQueries({ queryKey: ['project-tasks', id] });
       const prev = queryClient.getQueryData<{ tasks: Task[]; total: number; page: number; limit: number }>([
@@ -153,6 +155,41 @@ export function ProjectDetailPage() {
       }
       return { prev };
     },
+    onSuccess: (updatedTask) => {
+      const current = queryClient.getQueryData<{ tasks: Task[]; total: number; page: number; limit: number }>([
+        'project-tasks',
+        id,
+        statusFilter,
+        assigneeFilter,
+        page,
+        limit,
+      ]);
+      if (!current) return;
+
+      const statusMatch = !statusFilter || updatedTask.status === statusFilter;
+      const assigneeMatch =
+        !assigneeFilter ||
+        (assigneeFilter === 'unassigned' ? !updatedTask.assignee_id : updatedTask.assignee_id === assigneeFilter);
+
+      if (statusMatch && assigneeMatch) {
+        queryClient.setQueryData(
+          ['project-tasks', id, statusFilter, assigneeFilter, page, limit],
+          {
+            ...current,
+            tasks: current.tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t)),
+          }
+        );
+      } else {
+        queryClient.setQueryData(
+          ['project-tasks', id, statusFilter, assigneeFilter, page, limit],
+          {
+            ...current,
+            total: current.total - 1,
+            tasks: current.tasks.filter((t) => t.id !== updatedTask.id),
+          }
+        );
+      }
+    },
     onError: (_err, _vars, context) => {
       if (context?.prev) {
         queryClient.setQueryData(['project-tasks', id, statusFilter, assigneeFilter, page, limit], context.prev);
@@ -160,7 +197,6 @@ export function ProjectDetailPage() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['project', id] });
-      queryClient.invalidateQueries({ queryKey: ['project-tasks', id] });
       setEditingTask(null);
       setTaskDialogOpen(false);
     },
