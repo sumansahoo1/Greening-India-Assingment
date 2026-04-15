@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import type { Task, ProjectWithTasks, User } from '@/types';
@@ -190,10 +191,12 @@ export function ProjectDetailPage() {
         );
       }
     },
-    onError: (_err, _vars, context) => {
+    onError: (err: unknown, _vars, context) => {
       if (context?.prev) {
         queryClient.setQueryData(['project-tasks', id, statusFilter, assigneeFilter, page, limit], context.prev);
       }
+      const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      toast.error(message ?? 'Failed to update task');
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['project', id] });
@@ -208,6 +211,11 @@ export function ProjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['project', id] });
       queryClient.invalidateQueries({ queryKey: ['project-tasks', id] });
       setDeleteConfirm(null);
+    },
+    onError: (err: unknown) => {
+      setDeleteConfirm(null);
+      const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      toast.error(message ?? 'Failed to delete task');
     },
   });
 
