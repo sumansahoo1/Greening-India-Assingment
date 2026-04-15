@@ -2,9 +2,11 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/sumansahoo/taskflow/backend/internal/handler/response"
 	"github.com/sumansahoo/taskflow/backend/internal/middleware"
 	"github.com/sumansahoo/taskflow/backend/internal/repository"
@@ -60,6 +62,16 @@ func (h *UserHandler) ListAll(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
+
+	_, err := h.projects.GetByID(r.Context(), projectID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			response.Error(w, http.StatusNotFound, "project not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "failed to get project")
+		return
+	}
 
 	canAccess, err := h.projects.CanAccess(r.Context(), projectID, userID)
 	if err != nil {

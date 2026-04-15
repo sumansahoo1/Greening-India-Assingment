@@ -207,19 +207,53 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.projects.GetByID(r.Context(), task.ProjectID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			response.Error(w, http.StatusNotFound, "project not found")
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "failed to get project")
 		return
 	}
 
-	if project.OwnerID != userID && (task.AssigneeID == nil || *task.AssigneeID != userID) {
+	isOwner := project.OwnerID == userID
+	isCreator := task.CreatedBy == userID
+	isAssignee := task.AssigneeID != nil && *task.AssigneeID == userID
+
+	if !isOwner && !isCreator && !isAssignee {
 		response.Error(w, http.StatusForbidden, "forbidden")
 		return
 	}
+
+	// Assignees who are not the owner or creator may only update status.
+	assigneeOnly := !isOwner && !isCreator && isAssignee
 
 	var req updateTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, "invalid request body")
 		return
+	}
+
+	if assigneeOnly {
+		restricted := map[string]string{}
+		if req.Title != nil {
+			restricted["title"] = "cannot be modified"
+		}
+		if req.Description != nil {
+			restricted["description"] = "cannot be modified"
+		}
+		if req.Priority != nil {
+			restricted["priority"] = "cannot be modified"
+		}
+		if req.AssigneeID.Set {
+			restricted["assignee_id"] = "cannot be modified"
+		}
+		if req.DueDate != nil {
+			restricted["due_date"] = "cannot be modified"
+		}
+		if len(restricted) > 0 {
+			response.ValidationError(w, restricted)
+			return
+		}
 	}
 
 	fields := map[string]any{}
@@ -249,7 +283,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AssigneeID.Set {
 		if req.AssigneeID.Value == nil || strings.TrimSpace(*req.AssigneeID.Value) == "" || *req.AssigneeID.Value == "unassigned" {
-			fields["assignee_id"] = nil // clears assignee_id
+			fields["assignee_id"] = nil
 		} else {
 			fields["assignee_id"] = *req.AssigneeID.Value
 		}
@@ -297,11 +331,15 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.projects.GetByID(r.Context(), task.ProjectID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			response.Error(w, http.StatusNotFound, "project not found")
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "failed to get project")
 		return
 	}
 
-	if project.OwnerID != userID && (task.AssigneeID == nil || *task.AssigneeID != userID) {
+	if project.OwnerID != userID && task.CreatedBy != userID {
 		response.Error(w, http.StatusForbidden, "forbidden")
 		return
 	}
