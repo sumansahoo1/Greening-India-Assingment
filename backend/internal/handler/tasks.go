@@ -65,6 +65,23 @@ func (o *optionalString) UnmarshalJSON(b []byte) error {
 var validStatuses = map[string]bool{"todo": true, "in_progress": true, "done": true}
 var validPriorities = map[string]bool{"low": true, "medium": true, "high": true}
 
+// ListByProject godoc
+//
+//	@Summary	List tasks for a project
+//	@Tags		tasks
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		id			path		string	true	"Project ID"
+//	@Param		status		query		string	false	"Filter by status"	Enums(todo,in_progress,done)
+//	@Param		assignee		query		string	false	"Filter by assignee id or 'unassigned'"
+//	@Param		page		query		int		false	"Page number"	default(1)
+//	@Param		limit		query		int		false	"Page size"		default(20)
+//	@Success	200			{object}	map[string]any
+//	@Failure	401			{object}	map[string]string
+//	@Failure	403			{object}	map[string]string
+//	@Failure	404			{object}	map[string]string
+//	@Failure	500			{object}	map[string]string
+//	@Router		/projects/{id}/tasks [get]
 func (h *TaskHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
@@ -113,6 +130,22 @@ func (h *TaskHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Create godoc
+//
+//	@Summary	Create a task in a project
+//	@Tags		tasks
+//	@Security	BearerAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		id		path		string				true	"Project ID"
+//	@Param		request	body		createTaskRequest	true	"Task payload"
+//	@Success	201		{object}	model.Task
+//	@Failure	400		{object}	map[string]any
+//	@Failure	401		{object}	map[string]string
+//	@Failure	403		{object}	map[string]string
+//	@Failure	404		{object}	map[string]string
+//	@Failure	500		{object}	map[string]string
+//	@Router		/projects/{id}/tasks [post]
 func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
@@ -191,6 +224,22 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusCreated, task)
 }
 
+// Update godoc
+//
+//	@Summary	Update a task
+//	@Tags		tasks
+//	@Security	BearerAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		id		path		string				true	"Task ID"
+//	@Param		request	body		updateTaskRequest	true	"Update payload"
+//	@Success	200		{object}	model.Task
+//	@Failure	400		{object}	map[string]any
+//	@Failure	401		{object}	map[string]string
+//	@Failure	403		{object}	map[string]string
+//	@Failure	404		{object}	map[string]string
+//	@Failure	500		{object}	map[string]string
+//	@Router		/tasks/{id} [patch]
 func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	taskID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
@@ -315,6 +364,18 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, updated)
 }
 
+// Delete godoc
+//
+//	@Summary	Delete a task
+//	@Tags		tasks
+//	@Security	BearerAuth
+//	@Param		id	path	string	true	"Task ID"
+//	@Success	204
+//	@Failure	401	{object}	map[string]string
+//	@Failure	403	{object}	map[string]string
+//	@Failure	404	{object}	map[string]string
+//	@Failure	500	{object}	map[string]string
+//	@Router		/tasks/{id} [delete]
 func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	taskID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())

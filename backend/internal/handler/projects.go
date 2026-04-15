@@ -35,6 +35,18 @@ type updateProjectRequest struct {
 	Description *string `json:"description"`
 }
 
+// List godoc
+//
+//	@Summary	List projects
+//	@Tags		projects
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		page	query		int	false	"Page number"	default(1)
+//	@Param		limit	query		int	false	"Page size"		default(20)
+//	@Success	200		{object}	map[string]any
+//	@Failure	401		{object}	map[string]string
+//	@Failure	500		{object}	map[string]string
+//	@Router		/projects [get]
 func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	page, limit := parsePagination(r)
@@ -57,6 +69,19 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Create godoc
+//
+//	@Summary	Create a project
+//	@Tags		projects
+//	@Security	BearerAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		request	body		createProjectRequest	true	"Project payload"
+//	@Success	201		{object}	model.Project
+//	@Failure	400		{object}	map[string]any
+//	@Failure	401		{object}	map[string]string
+//	@Failure	500		{object}	map[string]string
+//	@Router		/projects [post]
 func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 
@@ -84,6 +109,19 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusCreated, project)
 }
 
+// Get godoc
+//
+//	@Summary	Get a project (with tasks)
+//	@Tags		projects
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		id	path		string	true	"Project ID"
+//	@Success	200	{object}	map[string]any
+//	@Failure	401	{object}	map[string]string
+//	@Failure	403	{object}	map[string]string
+//	@Failure	404	{object}	map[string]string
+//	@Failure	500	{object}	map[string]string
+//	@Router		/projects/{id} [get]
 func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
@@ -132,6 +170,22 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Update godoc
+//
+//	@Summary	Update a project
+//	@Tags		projects
+//	@Security	BearerAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		id		path		string				true	"Project ID"
+//	@Param		request	body		updateProjectRequest	true	"Update payload"
+//	@Success	200		{object}	model.Project
+//	@Failure	400		{object}	map[string]any
+//	@Failure	401		{object}	map[string]string
+//	@Failure	403		{object}	map[string]string
+//	@Failure	404		{object}	map[string]string
+//	@Failure	500		{object}	map[string]string
+//	@Router		/projects/{id} [patch]
 func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
@@ -180,6 +234,18 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, updated)
 }
 
+// Delete godoc
+//
+//	@Summary	Delete a project
+//	@Tags		projects
+//	@Security	BearerAuth
+//	@Param		id	path	string	true	"Project ID"
+//	@Success	204
+//	@Failure	401	{object}	map[string]string
+//	@Failure	403	{object}	map[string]string
+//	@Failure	404	{object}	map[string]string
+//	@Failure	500	{object}	map[string]string
+//	@Router		/projects/{id} [delete]
 func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
@@ -207,6 +273,19 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// Stats godoc
+//
+//	@Summary	Get project stats
+//	@Tags		projects
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		id	path		string	true	"Project ID"
+//	@Success	200	{object}	model.ProjectStats
+//	@Failure	401	{object}	map[string]string
+//	@Failure	403	{object}	map[string]string
+//	@Failure	404	{object}	map[string]string
+//	@Failure	500	{object}	map[string]string
+//	@Router		/projects/{id}/stats [get]
 func (h *ProjectHandler) Stats(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())

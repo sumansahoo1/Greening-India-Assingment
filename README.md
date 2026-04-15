@@ -35,8 +35,8 @@ A minimal but complete task management system with authentication, relational da
 Assumes you have Docker and Docker Compose installed.
 
 ```bash
-git clone https://github.com/sumansahoo1/Greening-India-Assingment.git
-cd taskflow
+git clone https://github.com/sumansahoo1/taskflow-suman-sahoo.git
+cd taskflow-suman-sahoo
 cp .env.example .env
 docker compose up --build
 ```
@@ -47,8 +47,12 @@ Notes:
 
 Once all three services are healthy:
 
-- **Frontend:** http://localhost:3000
-- **API:** http://localhost:8080
+- **Frontend:** `http://localhost:3000`
+- **API:** `http://localhost:8080`
+
+## API Docs (Swagger)
+
+![TaskFlow API Docs](docs/api.png)
 
 ---
 
@@ -68,7 +72,7 @@ docker compose exec api ./api  # migrations run on startup
 
 Two seed users are created automatically on first startup:
 
-```
+```text
 Email:    test@example.com
 Password: password123
 
@@ -84,160 +88,37 @@ The seed also creates 15 total projects and 20 tasks per project so the UI has e
 
 All endpoints return `Content-Type: application/json`. Protected endpoints require `Authorization: Bearer <token>`.
 
-### Preferences
+### Swagger (OpenAPI)
 
-Per-user preferences are stored server-side.
+Once the API is running, open:
 
-#### GET `/me/preferences`
+- Swagger UI: `http://localhost:8080/docs/`
+- OpenAPI spec (YAML): `backend/docs/swagger.yaml`
 
-```json
-// Response 200
-{ "projects_page_size": 12, "tasks_page_size": 12 }
-```
+### Authorization model (important behaviors)
 
-#### PATCH `/me/preferences`
+| Area | Rule |
+|---|---|
+| **Project list** | You only see projects you **own** or where you have **at least one assigned task**. |
+| **Project details** | Owner sees **all tasks**. Non-owner with access sees **only tasks assigned to them**. |
+| **Project updates/deletes** | **Owner only**. |
+| **Task creation** | Owner can create tasks for anyone. Non-owner with access may only create tasks **assigned to self** (and if omitted, assignee defaults to self). |
+| **Task updates** | Allowed if project **owner** OR task **creator** OR task **assignee**. If you are only the assignee (not owner/creator), you may update **status only**. |
+| **Task deletes** | Allowed if project **owner** OR task **creator**. |
 
-```json
-// Request — all fields optional
-{ "projects_page_size": 24 }
-```
+### Integration tests
 
-### Authentication
+Backend integration tests spin up PostgreSQL using Testcontainers and exercise auth + core authorization.
 
-#### POST `/auth/register`
-
-```json
-// Request
-{ "name": "Jane Doe", "email": "jane@example.com", "password": "secret123" }
-
-// Response 201
-{ "token": "<jwt>", "user": { "id": "uuid", "name": "Jane Doe", "email": "jane@example.com" } }
-```
-
-#### POST `/auth/login`
-
-```json
-// Request
-{ "email": "jane@example.com", "password": "secret123" }
-
-// Response 200
-{ "token": "<jwt>", "user": { "id": "uuid", "name": "Jane Doe", "email": "jane@example.com" } }
-```
-
-### Projects
-
-#### GET `/projects`
-
-Lists projects the current user owns or has tasks assigned in.
-
-Query params: `?page=1&limit=20`
-
-```json
-// Response 200
-{ "projects": [...], "total": 5, "page": 1, "limit": 20 }
-```
-
-#### POST `/projects`
-
-```json
-// Request
-{ "name": "New Project", "description": "Optional description" }
-
-// Response 201
-{ "id": "uuid", "name": "New Project", "description": "...", "owner_id": "uuid", "created_at": "..." }
-```
-
-#### GET `/projects/:id`
-
-Returns project details with all tasks embedded.
-
-```json
-// Response 200
-{
-  "id": "uuid", "name": "...", "description": "...", "owner_id": "uuid", "created_at": "...",
-  "tasks": [{ "id": "uuid", "title": "...", "status": "todo", "priority": "high", ... }]
-}
-```
-
-#### PATCH `/projects/:id`
-
-Update name and/or description. Owner only (403 otherwise).
-
-```json
-// Request — all fields optional
-{ "name": "Updated Name", "description": "Updated description" }
-```
-
-#### DELETE `/projects/:id`
-
-Deletes project and all its tasks. Owner only. Returns `204 No Content`.
-
-#### GET `/projects/:id/stats` (Bonus)
-
-Returns task counts grouped by status and by assignee.
-
-```json
-// Response 200
-{
-  "by_status": { "todo": 3, "in_progress": 2, "done": 1 },
-  "by_assignee": { "uuid": { "name": "Jane", "count": 4 }, "unassigned": { "name": "Unassigned", "count": 2 } }
-}
-```
-
-### Tasks
-
-#### GET `/projects/:id/tasks`
-
-Query params: `?status=todo&assignee=uuid&page=1&limit=20`
-
-```json
-// Response 200
-{ "tasks": [...], "total": 10, "page": 1, "limit": 20 }
-```
-
-#### POST `/projects/:id/tasks`
-
-```json
-// Request
-{ "title": "Design homepage", "description": "...", "priority": "high", "assignee_id": "uuid", "due_date": "2026-04-15" }
-
-// Response 201 — task object
-```
-
-#### PATCH `/tasks/:id`
-
-```json
-// Request — all fields optional
-{ "title": "Updated", "status": "done", "priority": "low", "assignee_id": "uuid", "due_date": "2026-04-20" }
-
-// Response 200 — updated task object
-```
-
-#### DELETE `/tasks/:id`
-
-Project owner or task creator only. Returns `204 No Content`.
-
-### Error Responses
-
-```json
-// 400 Validation error
-{ "error": "validation failed", "fields": { "email": "is required" } }
-
-// 401 Unauthenticated
-{ "error": "missing authorization header" }
-
-// 403 Forbidden
-{ "error": "forbidden" }
-
-// 404 Not found
-{ "error": "not found" }
+```bash
+cd backend
+go test ./...
 ```
 
 ---
 
 ## What I'd Do With More Time
 
-- **Integration tests:** Add at least 5-10 tests covering auth flow, project CRUD, and task authorization using `httptest` and a test database.
 - **Dark mode:** The CSS variable system is already set up for it (`.dark` class). Would add a toggle in the navbar that persists to localStorage.
 - **Drag-and-drop:** Use `@dnd-kit/core` for kanban-style task columns with drag to change status.
 - **Real-time updates:** WebSocket or SSE connection for live task updates across browser tabs/users.

@@ -46,6 +46,18 @@ type userJSON struct {
 	Email string `json:"email"`
 }
 
+// Register godoc
+//
+//	@Summary		Register a new user
+//	@Description	Creates a user and returns a JWT.
+//	@Tags			auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		registerRequest	true	"Register payload"
+//	@Success		201		{object}	authResponse
+//	@Failure		400		{object}	map[string]any
+//	@Failure		500		{object}	map[string]string
+//	@Router			/auth/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -96,6 +108,19 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Login godoc
+//
+//	@Summary		Log in
+//	@Description	Authenticates and returns a JWT.
+//	@Tags			auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		loginRequest	true	"Login payload"
+//	@Success		200		{object}	authResponse
+//	@Failure		400		{object}	map[string]any
+//	@Failure		401		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Router			/auth/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

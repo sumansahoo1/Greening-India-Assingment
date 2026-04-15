@@ -38,6 +38,16 @@ func (h *UserHandler) Me(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ListAll godoc
+//
+//	@Summary	List users
+//	@Tags		users
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Success	200	{object}	map[string]any
+//	@Failure	401	{object}	map[string]string
+//	@Failure	500	{object}	map[string]string
+//	@Router		/users [get]
 func (h *UserHandler) ListAll(w http.ResponseWriter, r *http.Request) {
 	users, err := h.users.ListAll(r.Context())
 	if err != nil {
@@ -59,6 +69,19 @@ func (h *UserHandler) ListAll(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]any{"users": members})
 }
 
+// ListByProject godoc
+//
+//	@Summary	List project members
+//	@Tags		users
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		id	path		string	true	"Project ID"
+//	@Success	200	{object}	map[string]any
+//	@Failure	401	{object}	map[string]string
+//	@Failure	403	{object}	map[string]string
+//	@Failure	404	{object}	map[string]string
+//	@Failure	500	{object}	map[string]string
+//	@Router		/projects/{id}/members [get]
 func (h *UserHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())

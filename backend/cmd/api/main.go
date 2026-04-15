@@ -1,5 +1,16 @@
 package main
 
+//	@title			TaskFlow API
+//	@version		1.0
+//	@description	REST API for TaskFlow (projects, tasks, auth).
+//
+//	@securityDefinitions.apikey	BearerAuth
+//	@in							header
+//	@name						Authorization
+//	@description				Type "Bearer <token>"
+//
+//	@BasePath	/
+
 import (
 	"context"
 	"fmt"
@@ -10,17 +21,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/cors"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/sumansahoo/taskflow/backend/internal/config"
-	"github.com/sumansahoo/taskflow/backend/internal/handler"
-	"github.com/sumansahoo/taskflow/backend/internal/middleware"
-	"github.com/sumansahoo/taskflow/backend/internal/repository"
+	"github.com/sumansahoo/taskflow/backend/internal/app"
 )
 
 func main() {
@@ -43,56 +50,9 @@ func main() {
 	runMigrations(cfg.DatabaseURL, logger)
 	runSeed(pool, logger)
 
-	userRepo := repository.NewUserRepo(pool)
-	prefsRepo := repository.NewPreferencesRepo(pool)
-	projectRepo := repository.NewProjectRepo(pool)
-	taskRepo := repository.NewTaskRepo(pool)
-
-	authHandler := handler.NewAuthHandler(userRepo, cfg.JWTSecret)
-	projectHandler := handler.NewProjectHandler(projectRepo, taskRepo)
-	taskHandler := handler.NewTaskHandler(taskRepo, projectRepo)
-	userHandler := handler.NewUserHandler(userRepo, prefsRepo, projectRepo)
-
-	r := chi.NewRouter()
-
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
-		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
-		MaxAge:           300,
-	}))
-	r.Use(middleware.Logging(logger))
-
-	r.Post("/auth/register", authHandler.Register)
-	r.Post("/auth/login", authHandler.Login)
-
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.Auth(cfg.JWTSecret))
-
-		r.Get("/me", userHandler.Me)
-		r.Get("/me/preferences", userHandler.GetPreferences)
-		r.Patch("/me/preferences", userHandler.UpdatePreferences)
-		r.Get("/users", userHandler.ListAll)
-		r.Get("/projects/{id}/members", userHandler.ListByProject)
-
-		r.Get("/projects", projectHandler.List)
-		r.Post("/projects", projectHandler.Create)
-		r.Get("/projects/{id}", projectHandler.Get)
-		r.Patch("/projects/{id}", projectHandler.Update)
-		r.Delete("/projects/{id}", projectHandler.Delete)
-		r.Get("/projects/{id}/stats", projectHandler.Stats)
-
-		r.Get("/projects/{id}/tasks", taskHandler.ListByProject)
-		r.Post("/projects/{id}/tasks", taskHandler.Create)
-		r.Patch("/tasks/{id}", taskHandler.Update)
-		r.Delete("/tasks/{id}", taskHandler.Delete)
-	})
-
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      r,
+		Handler:      app.NewRouter(cfg, pool, logger),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
