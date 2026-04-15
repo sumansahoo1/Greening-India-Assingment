@@ -208,7 +208,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	project, err := h.projects.GetByID(r.Context(), task.ProjectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			response.Error(w, http.StatusNotFound, "project not found")
+			response.Error(w, http.StatusNotFound, "not found")
 			return
 		}
 		response.Error(w, http.StatusInternalServerError, "failed to get project")
@@ -332,7 +332,7 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	project, err := h.projects.GetByID(r.Context(), task.ProjectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			response.Error(w, http.StatusNotFound, "project not found")
+			response.Error(w, http.StatusNotFound, "not found")
 			return
 		}
 		response.Error(w, http.StatusInternalServerError, "failed to get project")

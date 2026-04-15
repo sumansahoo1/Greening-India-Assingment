@@ -110,6 +110,10 @@ export function ProjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['project', id] });
       setEditProjectOpen(false);
     },
+    onError: (err: unknown) => {
+      const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      toast.error(message ?? 'Failed to update project');
+    },
   });
 
   const deleteProjectMutation = useMutation({
@@ -127,6 +131,10 @@ export function ProjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['project-tasks', id] });
       setTaskDialogOpen(false);
       taskForm.reset();
+    },
+    onError: (err: unknown) => {
+      const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      toast.error(message ?? 'Failed to create task');
     },
   });
 

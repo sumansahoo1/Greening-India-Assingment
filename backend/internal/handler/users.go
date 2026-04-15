@@ -66,7 +66,7 @@ func (h *UserHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 	_, err := h.projects.GetByID(r.Context(), projectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			response.Error(w, http.StatusNotFound, "project not found")
+			response.Error(w, http.StatusNotFound, "not found")
 			return
 		}
 		response.Error(w, http.StatusInternalServerError, "failed to get project")
